@@ -1,14 +1,11 @@
-# Import python packages
 import streamlit as st
 from snowflake.snowpark.functions import col
 import requests
+import pandas as pd
 
 # Write directly to the app
 st.title(":cup_with_straw: Customize Your Smoothie :cup_with_straw:")
-st.write(
-    """ Choose the fruits you want in your custom Smoothie
-    """
-)
+st.write("Choose the fruits you want in your custom Smoothie")
 
 # Get name for the order
 name_on_order = st.text_input("Name on Smoothie")
@@ -19,40 +16,44 @@ cnx = st.connection("snowflake")
 session = cnx.session()
 
 # Get fruit options from Snowflake
-my_dataframe = session.table("SMOOTHIES.PUBLIC.FRUIT_OPTIONS").select(col('FRUIT_NAME'))
-st.dataframe(data=my_dataframe, use_container_width=True)
+try:
+  fruit_options_df = session.table("SMOOTHIES.PUBLIC.FRUIT_OPTIONS").select(col('FRUIT_NAME')).to_pandas()
+  st.dataframe(data=fruit_options_df, use_container_width=True)
+except Exception as e:
+  st.error(f"Failed to fetch fruit options: {str(e)}")
 
 # Let user select fruits
 ingredients_list = st.multiselect(
-    'Choose up to 5 ingredients:',
-    my_dataframe,
-    max_selections = 5
+  'Choose up to 5 ingredients:',
+  fruit_options_df['FRUIT_NAME'].tolist() if not fruit_options_df.empty else [],
+  max_selections=5
 )
 
 if ingredients_list:
-    ingredients_string = ', '.join(ingredients_list)
-    st.write(f"You chose: {ingredients_string}")
-    
-    # Modify the insert statement to include the name
-    my_insert_stmt = f"""
-    INSERT INTO smoothies.public.orders(ingredients, name_on_order)
-    VALUES ('{ingredients_string}', '{name_on_order}')
-    """
-    # Remove or comment out the following line to hide the SQL statement
-    # st.write(my_insert_stmt)
-    
-    time_to_insert = st.button('Submit Order')
-    
-    if time_to_insert:
+  ingredients_string = ', '.join(ingredients_list)
+  st.write(f"You chose: {ingredients_string}")
+  
+  time_to_insert = st.button('Submit Order')
+  
+  if time_to_insert:
+      try:
+          # Use parameterized query to prevent SQL injection
+          session.sql(
+              "INSERT INTO smoothies.public.orders(ingredients, name_on_order) VALUES (?, ?)",
+              [ingredients_string, name_on_order]
+          ).collect()
+          st.success('Your Smoothie is ordered!', icon="✅")
+      except Exception as e:
+          st.error(f"An error occurred: {str(e)}")
 
-
-
-        try:
-            session.sql(my_insert_stmt).collect()
-            st.success('Your Smoothie is ordered!', icon="✅")
-        except Exception as e:
-            st.error(f"An error occurred: {str(e)}")
-
-
-fruityvice_response = requests.get("https://fruityvice.com/api/fruit/watermelon")
-fv_df = st.dataframe(data=fruityvice_response.json(), use_container_width=True)
+  # Fetch data from Fruityvice API for each ingredient
+  for fruit in ingredients_list:
+      try:
+          fruityvice_response = requests.get(f"https://fruityvice.com/api/fruit/{fruit.lower()}")
+          fruityvice_response.raise_for_status()  # Raise an error for bad responses
+          fv_data = fruityvice_response.json()
+          fv_df = pd.json_normalize(fv_data)  # Normalize JSON data into a flat table
+          st.write(f"Nutrition information for {fruit}:")
+          st.dataframe(data=fv_df, use_container_width=True)
+      except requests.exceptions.RequestException as e:
+          st.error(f"Failed to fetch data for {fruit}: {str(e)}")
