@@ -49,11 +49,14 @@ if ingredients_list:
   # Fetch data from Fruityvice API for each ingredient
   for fruit in ingredients_list:
       try:
-          fruityvice_response = requests.get(f"https://fruityvice.com/api/fruit/{fruit.lower()}")
+          fruit_name = fruit.lower()
+          fruityvice_response = requests.get(f"https://fruityvice.com/api/fruit/{fruit_name}")
           fruityvice_response.raise_for_status()  # Raise an error for bad responses
           fv_data = fruityvice_response.json()
           fv_df = pd.json_normalize(fv_data)  # Normalize JSON data into a flat table
           st.write(f"Nutrition information for {fruit}:")
           st.dataframe(data=fv_df, use_container_width=True)
-      except requests.exceptions.RequestException as e:
+      except requests.exceptions.HTTPError as http_err:
+          st.error(f"HTTP error occurred for {fruit}: {http_err}")
+      except Exception as e:
           st.error(f"Failed to fetch data for {fruit}: {str(e)}")
