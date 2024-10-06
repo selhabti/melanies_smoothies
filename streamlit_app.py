@@ -54,10 +54,10 @@ if ingredients_list:
           fruityvice_response.raise_for_status()  # Raise an error for bad responses
           fv_data = fruityvice_response.json()
           fv_df = pd.json_normalize(fv_data)  # Normalize JSON data into a flat table
-          st.write(f"Nutrition information for {fruit}:")
+          st.write(f"{fruit} Nutrition information:")
           st.dataframe(data=fv_df, use_container_width=True)
       except requests.exceptions.HTTPError:
-          st.write(f"Nutrition information for {fruit}:")
+          st.write(f"{fruit} Nutrition information:")
           not_found_df = pd.DataFrame({'Fruit': [fruit], 'Status': ['Not Found']})
           st.dataframe(data=not_found_df, use_container_width=True)
       except Exception as e:
